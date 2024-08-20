@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>epegLib Cloning</title>
+    <!--<link rel="stylesheet" href="css/library.css">-->
+</head>
+<body>
+    <h1>epegLib Cloning (9 bp random sequences)</h1>
+    <label for="dna-sequence">DNA Sequence:</label>
+    <input type="text" id="dna-sequence" name="dna-sequence" />
+    <br>
+    <label for="sat-area">Saturation Area:</label>
+    <input type="text" id="sat-area" name="sat-area" />
+    <br>
+    <label for="frame">Reading Frame:</label>
+    <select name="frame" id="frame">
+        <option name="+1" value="+1">+1</option>
+        <option name="+2" value="+2">+2</option>
+        <option name="+3" value="+3">+3</option>
+    </select>
+    <br>
+    <div>
+        <label for="splice-donor-1">Site 1 index range for excluding silent mutations (IN SATURATION AREA!!!!)</label>
+        <input type="text" id="splice-donor-1">
+        <span>-</span>
+        <input type="text" id="splice-donor-2">
+    </div>
+    <br>
+    <div>
+        <label for="splice-acceptor-1">Site 2 index range for excluding silent mutations (IN SATURATION AREA!!!!)</label>
+        <input type="text" id="splice-acceptor-1">
+        <span>-</span>
+        <input type="text" id="splice-acceptor-2">
+    </div>
+
+    <br>
+
+    <button onclick="processSequenceCloning('Lib_Random_noHA')">Lib_Random_noHA</button>
+    <button onclick="processSequenceCloning('Lib_Random_HA')">Lib_Random_HA</button>
+
+    <script>
+        function processSequenceCloning(lib_type) {
+            const dnaSequence = document.getElementById('dna-sequence').value;
+            const saturationArea = document.getElementById('sat-area').value;
+            const frame = document.getElementById('frame').value;
+
+            const donor1 = parseInt(document.getElementById('splice-donor-1').value);
+            const donor2 = parseInt(document.getElementById('splice-donor-2').value);
+            const acceptor1 = parseInt(document.getElementById('splice-acceptor-1').value);
+            const acceptor2 = parseInt(document.getElementById('splice-acceptor-2').value);
+
+            const acc = [acceptor1-1, acceptor2-1];
+            const don = [donor1-1, donor2-1];
+            const splice = [...Array(acc[1] - acc[0] + 1).keys()].map(i => i + acc[0])
+                          .concat([...Array(don[1] - don[0] + 1).keys()].map(i => i + don[0]));
+
+
+
+            fetch('/process_sequence_cloning', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ dna_sequence: dnaSequence, sat_area: saturationArea,
+                                       frame: frame, lib_type: lib_type, splice: splice })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.redirect) {
+                    window.location.href = data.redirect;
+                } else {
+                    console.error('Error:', data.error || 'Unknown error');
+                }
+            })
+            .catch(error => console.error('Error:', error));
+        }
+
+    </script>
+</body>
+</html>
