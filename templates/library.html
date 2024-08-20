@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>epegLib Full</title>
+    <!--<link rel="stylesheet" href="css/library.css">-->
+</head>
+<body>
+    <h1>epegLib Full (Opt. Scaffold)</h1>
+    <label for="dna-sequence">DNA Sequence:</label>
+        <input type="text" id="dna-sequence" name="dna-sequence" />
+
+    <label for="sat-area">Saturation Area:</label>
+        <input type="text" id="sat-area" name="sat-area" />
+
+    <label for="frame">Reading Frame:</label>
+        <select name="frame" id="frame">
+            <option name="+1" value="+1">+1</option>
+            <option name="+2" value="+2">+2</option>
+            <option name="+3" value="+3">+3</option>
+        </select>
+
+    <br>
+
+    <button onclick="processSequence('Lib_oSF_noHA')">Lib_oSF_noHA</button>
+    <button onclick="processSequence('Lib_oSF_HA')">Lib_oSF_HA</button>
+
+    <script>
+        function processSequence(lib_type) {
+            const dnaSequence = document.getElementById('dna-sequence').value;
+            const saturationArea = document.getElementById('sat-area').value;
+            const frame = document.getElementById('frame').value;
+
+            fetch('/process_sequence', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ dna_sequence: dnaSequence, sat_area: saturationArea,
+                                       frame: frame, lib_type: lib_type })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.redirect) {
+                    window.location.href = data.redirect;
+                } else {
+                    console.error('Error:', data.error || 'Unknown error');
+                }
+            })
+            .catch(error => console.error('Error:', error));
+        }
+
+
+        // function processSequenceHomo() {
+        //     const dnaSequence = document.getElementById('dna-sequence').value;
+        //     const saturationArea = document.getElementById('sat-area').value;
+        //     const frame = document.getElementById('frame').value;
+
+        //     fetch('/process_sequence_homo', {
+        //         method: 'POST',
+        //         headers: {
+        //             'Content-Type': 'application/json'
+        //         },
+        //         body: JSON.stringify({ dna_sequence: dnaSequence, sat_area: saturationArea, frame: frame })
+        //     })
+        //     .then(response => response.blob())
+        //     .then(blob => {
+        //         const url = window.URL.createObjectURL(blob);
+        //         const a = document.createElement('a');
+        //         a.href = url;
+        //         a.download = 'Lib_oSF_HA.zip';
+        //         a.click();
+        //         window.URL.revokeObjectURL(url);
+        //     })
+        //     .catch(error => console.error('Error:', error));
+        // }
+    </script>
+</body>
+</html>

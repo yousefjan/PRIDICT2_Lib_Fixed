@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>
+        epegRNA Designer
+    </title>
+    <!--<link rel="stylesheet" href="css/library.css">-->
+</head>
+<body>
+    <h1>epegRNA Designer (PRIDICT2.0, pegLIT)</h1>
+    <form action="/submit_form" method="post">
+        <label for="wts">Wide Target Sequence + Edit:</label>
+        <input type="text" id="wts" name="wts"><br><br>
+
+        <label for="block">Gene Fragment:</label>
+        <select name="block" id="block">
+            <option name="eblock" value="eblock">eBlock</option>
+            <option name="gblock" value="gblock">gBlock</option>
+        </select>
+
+        <label for="link">Include pegLIT linker?</label>
+        <input type="checkbox" id="link" name="link" value="true">
+
+        <br><br>
+
+        <button type="submit">Generate epegRNA</button>
+
+    </form>
+
+    <p>Enter 'Wide Target Sequence + Edit' in the following format: <br>
+    (99bp) (base before edit / base after edit) (99bp)
+    <br><br>Put unchanged bases flanking the edit *outside* of brackets <br>(e.g. NNNA(G/C)TNNN
+    instead of NNN(AGT/ACT)NNN). <br><br>For deletions or insertions use '(-N)' or '(+N)'
+    as placeholder.</p>
+
+    <!--<img src="http://yjsk.pythonanywhere.com/images/del.png" width = "800">-->
+    <!--<br>-->
+    <!--<img src="http://yjsk.pythonanywhere.com/images/ins.png" width = "800">-->
+    <!--<br>-->
+    <!--<img src="http://yjsk.pythonanywhere.com/images/sub.png" width = "800">-->
+
+
+</body>
+
+</html>

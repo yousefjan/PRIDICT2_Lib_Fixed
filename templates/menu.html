@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Menu</title>
+    <!--<link rel="stylesheet" href="css/menu.css">-->
+</head>
+
+<body>
+    <h1>Menu</h1>
+    <button onclick="redirectToHome()">epegRNA Designer (PRIDICT2.0, pegLIT)</button>
+    <button onclick="redirectToPage('/manual_pred')">Manual pegRNA Activity Prediction (PRIDICT2.0)</button>
+    <!--<button onclick="redirectToPage('/library')">epegLib Full (Opt. Scaffold)</button>-->
+    <button onclick="redirectToPage('/cloning')">epegLib Cloning</button>
+
+    <script>
+        function redirectToHome() {
+            window.location.href = '/home';
+        }
+
+        function redirectToPage(url) {
+            window.location.href = url;
+        }
+    </script>
+</body>
+</html>
