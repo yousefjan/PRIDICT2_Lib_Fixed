@@ -546,7 +546,7 @@ def run_freq_plot(seq: str, sseq: str) -> None:
             verticalalignment='center',
             bbox=dict(facecolor='lightgray', alpha=0.5))
 
-    plt.savefig('freq_plot.pdf', bbox_inches='tight')
+    plt.savefig('./lib/freq_plot.pdf', bbox_inches='tight')
 
 # TODO: This is incorrect, (-) PAMs not all accounted for
 def run_figure(seq, sseq):
@@ -1291,28 +1291,30 @@ def run_synony(seq: str, sseq: str, frame: int, df, HA, splice):
 
 
 if __name__ == '__main__':
-    vhl_seq = 'ttttctttaacctaaagtgagatccatcagtagtacaggtagttgttggcaaagcctcttgttcgttccttgtactgagaccctagtctgccactgaggatttggtttttgcccttccagTGTATACTCTGAAAGAGCGATGCCTCCAGGTTGTCCGGAGCCTAGTCAAGCCTGAGAATTACAGGAGACTGGACATCGTCAGGTCGCTCTACGAAGATcTGGAAGACCACCCAAATGTGCAGAAAGACCTGGAGcGGCTGACACAGGAGCGCATTGCACATCAACGGATGGGAGATTGAAGATTTCTGTTGAAACTTACACTGTTTCATCTCAGCTTTTGATGGTACTGATGAGTCTTGATCTAGATACAGGACTGGTTCCTTCCTTAGTTTCAAAGTGTCTCATTCTCAG'
-    vhl_sseq = 'gatttggtttttgcccttccagTGTATACTCTGAAAGAGCGATGCCTCCAGGTTGTCCGGAGCCTAGTCAAGCCTGAGAATTACAGGAGACTGGACATCGTCAGGTCGCTCTACGAAGATcTGGAAGACCACCCAAATGTGCAGAAAGACCTGGAGcGGCTGACACAGGAGCGCATTGCACATCAACGGATGGGAGATTGAAGATTTCTGTT'
-    npc_seq = 'TACAGCTGGGTCTGACCTCTGAGTCCAGGGTCAGGTGATTTTGCTTAGCCTCAAGTGCTCAGATTCTGCTGATATTTTGCAAGACCTGGACTCTCTTGACACCCAGGATTCTTTCCTCAGGGGACATGCTGCCTATAGTTCTGCAGTTAACATCCTCCTTGGCCATGGCACCAGGGTCGGAGCCACGTACTTCATGACCTACCACACCGTGCTGCAGACCTCTGCTGACTTTATTGACGCTCTGAAGAAAGCCCGACTTATAGCCAGTAATGTCACCGAAACCATGGGCATTAACGGCAGTGCCTACCGAGTATTTCCTTACAGGTAAAGCCTGCCCTTTTTCAATGGGGTTTACCCAGCAAAGGGCCTACACTGGGTGGGAGTGGGGAGGGTTCCCTTGGCAAGATGCTGATTTTCAGGTTGGGTTCTGGCCCCTGCTCCATT'.upper()
-    npc_sseq = 'ACCCAGGATTCTTTCCTCAGGGGACATGCTGCCTATAGTTCTGCAGTTAACATCCTCCTTGGCCATGGCACCAGGGTCGGAGCCACGTACTTCATGACCTACCACACCGTGCTGCAGACCTCTGCTGACTTTATTGACGCTCTGAAGAAAGCCCGACTTATAGCCAGTAATGTCACCGAAACCATGGGCATTAACGGCAGTGCCTACCGAGTATTTCCTTACAGGTAAAGCCTGCCCTTTTTCA'.upper()
     
+    # Set parameters: 
+    seq_ = 'ttttctttaacctaaagtgagatccatcagtagtacaggtagttgttggcaaagcctcttgttcgttccttgtactgagaccctagtctgccactgaggatttggtttttgcccttccagTGTATACTCTGAAAGAGCGATGCCTCCAGGTTGTCCGGAGCCTAGTCAAGCCTGAGAATTACAGGAGACTGGACATCGTCAGGTCGCTCTACGAAGATcTGGAAGACCACCCAAATGTGCAGAAAGACCTGGAGcGGCTGACACAGGAGCGCATTGCACATCAACGGATGGGAGATTGAAGATTTCTGTTGAAACTTACACTGTTTCATCTCAGCTTTTGATGGTACTGATGAGTCTTGATCTAGATACAGGACTGGTTCCTTCCTTAGTTTCAAAGTGTCTCATTCTCAG'
+    sseq_ = 'gatttggtttttgcccttccagTGTATACTCTGAAAGAGCGATGCCTCCAGGTTGTCCGGAGCCTAGTCAAGCCTGAGAATTACAGGAGACTGGACATCGTCAGGTCGCTCTACGAAGATcTGGAAGACCACCCAAATGTGCAGAAAGACCTGGAGcGGCTGACACAGGAGCGCATTGCACATCAACGGATGGGAGATTGAAGATTTCTGTT'
+    acc = [18, 21]
+    don = [223, 231]
+    splice = list(range(acc[0] - 1, acc[1])) + list(range(don[0] - 1, don[1]))
+    frame = +2
 
-    run_figure(npc_seq, npc_sseq)
+    # Cloning library without homology arms
+    libs = run_cloning_(seq_, sseq_, frame, splice)
 
-    # acc = [18, 21]
-    # don = [223, 231]
-    # splice = list(range(acc[0] - 1, acc[1])) + list(range(don[0] - 1, don[1]))
+    # Cloning library with homology arms
+    # libs = run_cloning(seq_, sseq_, frame, splice)
 
-    # libs = run_cloning_(npc_seq, npc_sseq, 2, splice)
-    # libs[0].to_csv('./lib/full_npc.csv', index=False)
-    # libs[1].to_csv('./lib/no_ctl_npc.csv', index=False)
-    # libs[2].to_csv('./lib/only_ctl_npc.csv', index=False)
+    libs[0].to_csv('./library/full.csv', index=False)
+    libs[1].to_csv('./library/no_ctl.csv', index=False)
+    libs[2].to_csv('./library/only_ctl.csv', index=False)
 
-    # run_synony(npc_seq, npc_sseq, 2, libs[1], HA=False, splice=splice).to_csv('./lib/synony_npc.csv')
+    # Cloning library with silent mutations
+    run_synony(seq_, sseq_, 2, libs[1], HA=False, splice=splice).to_csv('./library/synony_full.csv')
 
-    # syn = _get_synony_rtt(npc_seq, npc_sseq, 'TTGACACCCAGGATTCTTTCCTCAG', 2, '-', splice)
-    # print(syn)
+    # Generates frequency table and plot
+    run_freq_table(seq_, sseq_).to_csv('./library/freq_table.csv', index=False)
+    run_freq_plot(seq_, sseq_)
 
-    # rtts = _find_rtts(seq=npc_seq, sseq=npc_sseq, rtts=['TCCTGGGTGTCAAGAGAGTCCAGGT'], 
-    #                  frame=2, syn=False, strand='+', splice=splice).values()
-    # print(rtts)
+    # Check results in 'lib' folder
