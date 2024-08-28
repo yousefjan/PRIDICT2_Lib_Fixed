@@ -1,5 +1,5 @@
 import pandas as pd
-from main import _find_rtt,_find_rtts, _r, _c, trim_string, run_synony
+from main import _find_rtt, _r, _c, trim_string, run_synony
 
 def find_mutation_index(original, mutated, strand):
     if strand=='+':
@@ -42,20 +42,6 @@ def get_pridict_df(library, seq, sseq, frame):
     seq_ = trim_string(seq, sseq)
     scored_rows = library.groupby('PAM No.', group_keys=False).apply(lambda x: x.iloc[len(x) // 2]).reset_index(drop=True)
 
-    # wt_rtts_f = list(_find_rtts(seq=seq_, 
-    #                           rtts=_find_rtt(seq_, '+'), 
-    #                           sseq=sseq, 
-    #                           frame=frame,
-    #                           syn=True,
-    #                           strand='+').keys())
-    
-    # wt_rtts_r = list(_find_rtts(seq=trim_string(seq_, sseq), 
-    #                           rtts=_find_rtt(trim_string(seq_, sseq), '-'), 
-    #                           sseq=sseq, 
-    #                           frame=frame,
-    #                           syn=True,
-    #                           strand='-').keys())
-
     wt_rtts_f = _find_rtt(seq, sseq, strand='+')
     wt_rtts_r = _find_rtt(seq, sseq, strand='-')
     
@@ -73,30 +59,4 @@ def get_pridict_df(library, seq, sseq, frame):
         scored_rows.at[i, 'PRIDICT2.0 score'] = 'yo'
 
     return scored_rows
-
-
-
-# seq = 'gagaccctagtctgccactgaggatttggtttttgcccttccagTGTATACTCTGAAAGAGCGATGCCTCCAGGTTGTCCGGAGCCTAGTCAAGCCTGAGAATTACAGGAGACTGGACATCGTCAGGTCGCTCTACGAAGATcTGGAAGACCACCCAAATGTGCAGAAAGACCTGGAGcGGCTGACACAGGAGCGCATTGCACATCAACGGATGGGAGATTGAAGATTTCTGTTGAAACTTACACTGTTT'.upper()
-seq = 'ttttttctttaacctaaagtgagatccatcagtagtacaggtagttgttggcaaagcctcttgttcgttccttgtactgagaccctagtctgccactgaggatttggtttttgcccttccagTGTATACTCTGAAAGAGCGATGCCTCCAGGTTGTCCGGAGCCTAGTCAAGCCTGAGAATTACAGGAGACTGGACATCGTCAGGTCGCTCTACGAAGATcTGGAAGACCACCCAAATGTGCAGAAAGACCTGGAGcGGCTGACACAGGAGCGCATTGCACATCAACGGATGGGAGATTGAAGATTTCTGTTGAAACTTACACTGTTTCATCTCAGCTTTTGATGGTACTGATGAGTCTTGATCTAGATACAGGACTGGTTCCTTCCTTAGTTTCAAAGTGTCTCATTCTCA'.upper()
-sseq = 'gatttggtttttgcccttccagTGTATACTCTGAAAGAGCGATGCCTCCAGGTTGTCCGGAGCCTAGTCAAGCCTGAGAATTACAGGAGACTGGACATCGTCAGGTCGCTCTACGAAGATcTGGAAGACCACCCAAATGTGCAGAAAGACCTGGAGcGGCTGACACAGGAGCGCATTGCACATCAACGGATGGGAGATTGAAGATTTCTGTT'.upper()
-lib = run_synony(seq, sseq, 2)
-get_pridict_df(lib, seq, sseq, 2).to_csv('get_pridict_df.csv')
-# seq = trim_string(seq, sseq)
-# wt_rtts_f = list(_find_rtts(seq=seq, 
-#                               rtts=_find_rtt(seq, '+'), 
-#                               sseq=sseq, 
-#                               frame=2,
-#                               syn=True,
-#                               strand='+').keys())
-    
-# wt_rtts_r = list(_find_rtts(seq=trim_string(seq, sseq), 
-#                             rtts=_find_rtt(trim_string(seq, sseq), '-'), 
-#                             sseq=sseq, 
-#                             frame=2,
-#                             syn=True,
-#                             strand='-').keys())
-
-# wt_rtts = wt_rtts_f + wt_rtts_r
-
-# print(generate_formatted_strings(lib, seq, wt_rtts))
 

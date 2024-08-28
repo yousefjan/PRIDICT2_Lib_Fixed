@@ -49,18 +49,9 @@ def get_pridict_df(seq, sseq, frame):
     library = run(seq, sseq, frame)[0]
     scored_rows = library.groupby('PAM No.', group_keys=False).apply(lambda x: x.iloc[len(x) // 2]).reset_index(drop=True)
 
-    wt_rtts_f = list(_find_rtts(seq=seq_,
-                              rtts=_find_rtt(seq_, '+'),
-                              sseq=sseq,
-                              frame=frame,
-                              syn=True,
-                              strand='+').keys())
-    wt_rtts_r = list(_find_rtts(seq=trim_string(seq_, sseq),
-                              rtts=_find_rtt(trim_string(seq_, sseq), '-'),
-                              sseq=sseq,
-                              frame=frame,
-                              syn=True,
-                              strand='-').keys())
+    wt_rtts_f = _find_rtt(seq, sseq, strand='+')
+    wt_rtts_r = _find_rtt(seq, sseq, strand='-')
+    
     wt_rtts = wt_rtts_f + wt_rtts_r
 
     pridict_inputs = generate_formatted_strings(scored_rows, seq, wt_rtts)

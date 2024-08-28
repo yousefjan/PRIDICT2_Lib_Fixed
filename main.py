@@ -3,12 +3,20 @@ import numpy as np
 import pandas as pd
 import random
 import matplotlib.pyplot as plt
-from reportlab.pdfgen import canvas
+import subprocess
+import time
+import os
 
+# Set parameters: 
 SF = 'GTTTCAGAGCTATGCTGGAAACAGCATAGCAAGTTGAAATAAGGCTAGTCCGTTATCAACTTGAAAAAGTGGCACCGAGTCGGTGC'
 fivep_homo = 'ATCTTGTGGAAAGGACGAGGTACCG'
 threep_homo = 'CGCGGTTCTATCTAGTTACGCGTTA'
-codon_table = {
+
+complement = {'A': 'T', 'T': 'A', 'C': 'G', 'G': 'C'}
+NG = {'AG', 'TG', 'CG', 'GG'}
+NGG = {'AGG', 'TGG', 'CGG', 'GGG'}
+
+SynonymousCodons = {
     'C': ['TGT', 'TGC'],
     'D': ['GAT', 'GAC'],
     'S': ['TCT', 'TCG', 'TCA', 'TCC', 'AGC', 'AGT'],
@@ -31,37 +39,28 @@ codon_table = {
     'E': ['GAG', 'GAA'],
     'Y': ['TAT', 'TAC']
 }
-
 # 5' - N(NG G)NN - 3'
 # First codon (N(NG destroy last G)
 pam_snv = {'AAG': 'AAA', 'CAG': 'CAA', 'GAG': 'GAA', 'TAG': 'TAG',
            'ACG': 'ACC', 'CCG': 'CCT', 'GCG': 'GCC', 'TCG': 'TCT',
            'ATG': 'ATG', 'CTG': 'CTT', 'GTG': 'GTT', 'TTG': 'TTA',
            'AGG': 'AGA', 'CGG': 'CGT', 'GGG': 'GGC', 'TGG': 'TGG'}
-  
+
 
 def _random_filler() -> str:
-    """Returns a 9bp random DNA sequence for filler
-    """
     return ''.join(random.choice("ATGC") for _ in range(9))
 
 
 def _c(seq: str) -> str:
-    """Returns the COMPLEMENT of <seq>
-    """
     _seq = seq.upper()
     _c_ = {'A': 'T', 'T': 'A', 'G': 'C', 'C': 'G', 'N': 'N'}
     return ''.join(_c_[bp] for bp in _seq)
 
 
 def _r(seq: str) -> str:
-    """Returns the REVERSE of <seq>
-    """
     return seq[::-1]
 
 def _overlap(x: str, y: str, z: str) -> str:
-    """Returns <z> (RTT) contained in <y> (saturation area) which is substring of <x> (gene)
-    """
     # seq,sseq,rtt
     s1, s2 = x.find(y), x.find(z)
     e1, e2 = s1 + len(y) - 1, s2 + len(z) - 1
@@ -90,11 +89,7 @@ def _overlap(x: str, y: str, z: str) -> str:
                 return x[s1:e2 + 1]
 
 
-def trim_string(seq, sseq) -> str:
-    """Returns a subsequence of <seq> that accomodates RTTs with at least 1 bp in <sseq>
-    
-    MAINTAINS FRAME
-    """
+def trim_string(seq, sseq):
     # returns substring of seq in same frame
     index = seq.find(sseq)
     start = 0
@@ -108,9 +103,7 @@ def trim_string(seq, sseq) -> str:
     return trimmed_string
 
 
-def _find_rtt(seq, sseq, strand) -> list:
-    """Returns a list of RTTs in <seq> for the <strand> strand
-    """
+def _find_rtt(seq: str, sseq, strand) -> list:
     pam = r'(?=(.{20}GG.{19}))'
     rtts = []
 
@@ -136,10 +129,10 @@ def _find_rtt(seq, sseq, strand) -> list:
         for match in pam_matches:
             rtt = _r(_c(match[16:]))
             rtts.append(rtt)
-            
+
         seq, sseq = _r(_c(seq)), _r(_c(sseq))
         seq = trim_string(seq, sseq)
-        
+
         pam_matches = re.findall(pam, seq)
         for match in pam_matches:
             rtt = _r(_c(match[16:]))
@@ -149,12 +142,8 @@ def _find_rtt(seq, sseq, strand) -> list:
 
 
 def _get_control_rtt(seq, sseq, rtt, frame, strand, syn, splice) -> str:
-    """Returns the stop control RTT corresponding to the WT <rtt>
-    
-    Used in both _find_rtts() and run_synony() via <syn>
-    For synonymous control RTTs, silent mutations not installed in <splice>
-    """
     frame -= 1
+
     if strand == "+":
         rtt_ = _r(_c(rtt))
         idx = (seq.index(rtt_) + 1) % 3
@@ -197,9 +186,6 @@ def _get_control_rtt(seq, sseq, rtt, frame, strand, syn, splice) -> str:
 
 
 def _find_rtts(seq: str, rtts: list, sseq: str, frame, syn, strand, splice) -> dict:
-    """Returns a dict where keys are to WT RTTs in <rtts> and values are list of every correponding RTT for
-    nucleotide level saturation
-    """
     seq = trim_string(seq, sseq)
     sseq_end = seq.index(sseq) + len(sseq)
 
@@ -214,7 +200,7 @@ def _find_rtts(seq: str, rtts: list, sseq: str, frame, syn, strand, splice) -> d
             if seq.index(_r(_c(rtt))) + 25 > sseq_end:  # RTT hangs over end of sseq
                 overlap_index = rtt.rfind(overlap)
                 r = rtt[:overlap_index]
-            
+
             if seq.index(_r(_c(rtt))) < seq.index(sseq):  # RTT hangs over start of sseq
                 r = rtt.replace(overlap, '', 1)
         if strand == '-':
@@ -223,7 +209,7 @@ def _find_rtts(seq: str, rtts: list, sseq: str, frame, syn, strand, splice) -> d
             # RTT not in saturation area
             if seq.index(rtt) + 25 > sseq_end:  # RTT hangs over end of sseq
                 r = rtt.replace(overlap, '', 1)
-            
+
             if seq.index(rtt) < seq.index(sseq):  # RTT hangs over start of sseq
                 overlap_index = rtt.rfind(overlap)
                 r = rtt[:overlap_index]
@@ -252,15 +238,9 @@ def _find_rtts(seq: str, rtts: list, sseq: str, frame, syn, strand, splice) -> d
 
 
 def _find_pams(seq: str, sseq, strand, n=0) -> list:
-    """Returns list of PAMs in <seq> for the <strand> strand
-
-    (-) strand PAM numbering starts at last (+) strand PAM
-
-    ex: [('CGG', 1, '+'), ('TGG', 2, '+') ... ]
-    """
     if strand == "+":
         seq = trim_string(seq, sseq)
-    
+
     if strand == "-":
         seq, sseq = _r(_c(seq)), _r(_c(sseq))
         seq = trim_string(seq, sseq)
@@ -278,16 +258,8 @@ def _find_pams(seq: str, sseq, strand, n=0) -> list:
     return sequences
 
 
-def _find_seqs(seq: str, p: list, sseq: str, frame: int, splice, strand: str) -> dict:
-    """Returns entire peg combination: a dict with keys as PAMs and values as list of corresponding peg sequence
-
-    ex: {('CGG', 1, '+'): ['spacer', 'pbs', ['rtt1', 'rtt2', ..., 'rtt75']], ('TGG', 2, '+'): ... }
-    """
-    if strand == "+":
-        seq = trim_string(seq, sseq)
-    else:
-        seq, sseq = _r(_c(seq)), _r(_c(sseq))
-        seq = trim_string(seq, sseq)
+def _find_seqs_f(seq: str, p: list, sseq: str, frame: int, splice) -> dict:
+    seq = trim_string(seq, sseq)
 
     pam = r'(?=(.{20}GG.{19}))'
     pam_matches = re.findall(pam, seq)
@@ -295,16 +267,39 @@ def _find_seqs(seq: str, p: list, sseq: str, frame: int, splice, strand: str) ->
     spacers = []
     pbss = []
     for match in pam_matches:
-        if strand == "+":
-            spacer = 'G' + match[:-22]
-        else:
-            spacer = 'G' + match[0:19]
+        spacer = 'G' + match[:-22]
         spacers.append(spacer)
         pbs = _r(_c(match[3:16]))
         pbss.append(pbs)
 
-    rtts = _find_rtt(seq, sseq, strand=strand)
-    all_rtts = _find_rtts(seq, rtts, sseq, frame, syn=False, strand=strand, splice=splice)
+    rtts = _find_rtt(seq, sseq, strand="+")
+    all_rtts = _find_rtts(seq, rtts, sseq, frame, syn=False, strand='+', splice=splice)
+
+    seqs = {}
+    for i in range(len(p)):
+        if spacers[i]:
+            seqs[p[i]] = [spacers[i], pbss[i], all_rtts[rtts[i]]]
+
+    return seqs
+
+
+def _find_seqs_r(seq: str, p: list, sseq: str, frame: int, splice) -> dict:
+    rtts = _find_rtt(seq=seq, sseq=sseq, strand="-")
+    all_rtts = _find_rtts(seq, rtts, sseq, frame, syn=False, strand='-', splice=splice)
+
+    seq, sseq = _r(_c(seq)), _r(_c(sseq))
+    seq = trim_string(seq, sseq)
+
+    pam = r'(?=(.{20}GG.{19}))'
+    pam_matches = re.findall(pam, seq)
+
+    spacers = []
+    pbss = []
+    for match in pam_matches:
+        spacer = 'G' + match[0:19]
+        spacers.append(spacer)
+        pbs = _r(_c(match[3:16]))
+        pbss.append(pbs)
 
     seqs = {}
     for i in range(len(p)):
@@ -339,12 +334,7 @@ def _make_df_homo(seqs: dict) -> pd.DataFrame:
     df_['Length (bp)'] = df_['Complete epegRNA'].apply(lambda x: len(x))
 
     return df_
-def _make_df_cloning(seq, sseq, seqs: dict) -> pd.DataFrame:
-
-    wt_rtts_f = _find_rtt(seq, sseq, '+')
-    wt_rtts_r = _find_rtt(seq, sseq, '-')
-    wt_rtts = wt_rtts_f + wt_rtts_r
-
+def _make_df_cloning(seqs: dict) -> pd.DataFrame:
     df_ = _make_df_homo(seqs)
     df_.drop(columns='Scaffold', inplace=True)
     df_.drop(columns='Complete epegRNA', inplace=True)
@@ -362,14 +352,10 @@ def _make_df_cloning(seq, sseq, seqs: dict) -> pd.DataFrame:
 
     df_['epeg No. within PAM'] = df_.groupby('PAM No.').cumcount() + 1
 
-    df_['Edited DNA Sequence'] = df_.apply(lambda row: process_row(row, seq, wt_rtts), axis=1)
-
     return df_
 
 
 def _make_df_freq(seq: str, rtts: list) -> pd.DataFrame:
-    """Makes dataframe for frequency table and plot
-    """
     counts = [0] * len(seq)
 
     for rtt in rtts:
@@ -392,8 +378,7 @@ def _make_df_freq(seq: str, rtts: list) -> pd.DataFrame:
     return df
 
 
-# For getting reference sequence
-# TODO: Combine these functions
+# For getting ED seq
 def highlight_differences(seq, subseq, start, strand):
     diff = []
     diff.append(seq[:start])
@@ -423,25 +408,23 @@ def process_row(row, seq, wt_rtts):
     return highlight_differences(seq, subseq, start, row['Strand'])
 
 
+# RUN FOR epegRNA LIBRARY FOR CLONING W/ HOMO ARMS
 def run_cloning(seq: str, sseq: str, frame, splice) -> tuple:
-    """Function to run in web to generate epegRNA saturation libraries.
-
-    Homology arms included, epegRNA with SF and filler included, edited sequence included.
-
-    Returns library, library without controls, library with only controls
-    """
 
     seq, sseq = seq.upper(), sseq.upper()
 
-    seqs_f = _find_seqs(seq, p=_find_pams(seq, sseq, '+'), sseq=sseq, frame=frame, splice=splice, strand='+')
-    seqs_r = _find_seqs(seq, p=_find_pams(seq, sseq, '-', len(_find_pams(seq, sseq, '+'))), sseq=sseq, frame=frame, splice=splice, strand='-')
-    
-    df_f = _make_df_cloning(seq, sseq, seqs_f)
-    df_r = _make_df_cloning(seq, sseq, seqs_r)
-    
+    wt_rtts_f = _find_rtt(seq, sseq, '+')
+    wt_rtts_r = _find_rtt(seq, sseq, '-')
+    wt_rtts = wt_rtts_f + wt_rtts_r
+
+    pams_f = _find_pams(seq, sseq, '+')
+    pams_r = _find_pams(seq, sseq, '-', len(pams_f))
+    df_r = _make_df_cloning(_find_seqs_r(seq, p=pams_r, sseq=sseq, frame=frame, splice=splice))
+    df_f = _make_df_cloning(_find_seqs_f(seq, p=pams_f, sseq=sseq, frame=frame, splice=splice))
     df = pd.concat([df_f, df_r], ignore_index=True)
 
     df['epeg No.'] = df.index + 1
+    df['Edited DNA Sequence'] = df.apply(lambda row: process_row(row, seq, wt_rtts), axis=1)
 
     df = df[['epeg No.', 'PAM', 'PAM No.', 'Strand', 'LHA', 'Spacer', 'Filler',
              'RTTs', 'PBS', 'RHA', 'Complete epegRNA', 'Length (bp)', 'Complete epegRNA (SF)',
@@ -456,13 +439,8 @@ def run_cloning(seq: str, sseq: str, frame, splice) -> tuple:
     return df, df_no_ctl, df_only_ctl
 
 
+# RUN FOR epegRNA LIBRARY FOR CLONING W/O HOMO ARMS
 def run_cloning_(seq: str, sseq: str, frame, splice) -> tuple:
-    """Function to run in web to generate epegRNA saturation libraries.
-
-    Homology arms NOT included, epegRNA with SF and filler included, edited sequence included.
-
-    Returns library, library without controls, library with only controls
-    """
 
     df, df_no_ctl, df_only_ctl = run_cloning(seq, sseq, frame, splice)
 
@@ -492,8 +470,6 @@ def run_cloning_(seq: str, sseq: str, frame, splice) -> tuple:
 
 
 def run_freq_table(seq: str, sseq: str) -> pd.DataFrame:
-    """Function to run in web to generate frequency table
-    """
     seq = seq.upper()
     sseq = sseq.upper()
     seq = trim_string(seq, sseq)
@@ -507,8 +483,6 @@ def run_freq_table(seq: str, sseq: str) -> pd.DataFrame:
 
 
 def run_freq_plot(seq: str, sseq: str) -> None:
-    """Function to run in web to generate frequency plot
-    """
     seq = seq.upper()
     sseq = sseq.upper()
     seq = trim_string(seq, sseq)
@@ -546,83 +520,10 @@ def run_freq_plot(seq: str, sseq: str) -> None:
             verticalalignment='center',
             bbox=dict(facecolor='lightgray', alpha=0.5))
 
-    plt.savefig('./lib/freq_plot.pdf', bbox_inches='tight')
-
-# TODO: This is incorrect, (-) PAMs not all accounted for
-def run_figure(seq, sseq):
-    """Function to run in web to generate frequency figure
-    """
-    seq, sseq = seq.upper(), sseq.upper()
-    seq = trim_string(seq, sseq)
-    cseq = _c(seq)
-
-    complement = {'A': 'T', 'T': 'A', 'C': 'G', 'G': 'C'}
-
-    max_lines = (len(seq) - 1) // 50 + 1
-    width, height = 50 + len(seq) * 10, 100 + max_lines * 20
-
-    pams = ['AGG', 'TGG', 'CGG', 'GGG']
-
-    c = canvas.Canvas('pam_figure.pdf', pagesize=(width, height))
-
-    x, y = 20, height - 50
-    df = _make_df_freq(seq, _find_rtt(seq, sseq, None))
-    positions = df['Position'].unique()
-
-    for i, position in enumerate(positions):
-        freq = df.loc[df['Position'] == position, 'Frequency']
-        freq_str = freq.to_string(index=False)
-        c.drawString(20 + i * 10, y + 24, freq_str)
-
-    sseq_start = seq.index(sseq)
-    sseq_end = sseq_start + len(sseq)
-
-    # (+) strand boxes
-    count = 1
-    for i, base in enumerate(seq):
-        complement_base = complement[base]
-        c.drawString(x, y, base)
-        c.drawString(x, y - 12, complement_base)
-        x += 10
-
-        counting = False
-        for pam in pams:
-            if seq[
-               i:i + 3] == pam and sseq_start - 21 <= i <= sseq_end + 2 and i >= 19 and len(
-                seq[i:None]) >= 22:
-                c.rect(20 + i * 10, y - 2, 30, 12)
-                c.drawString(20 + i * 10, y + 12, str(count))
-                counting = True
-
-        if counting is True:
-            count += 1
-
-    # (-) strand boxes
-    for i in range(len(cseq), -1, -1):
-        counting = False
-        for pam in pams:
-            if cseq[i - 3:i] == _r(
-                    pam) and sseq_start - 2 <= i <= sseq_end + 21 and i <= len(
-                seq) - 19 and len(seq[None:i]) >= 22:
-                c.rect(i * 10 - 10, y - 14, 30, 12)
-                c.drawString(i * 10 - 10, y - 24, str(count))
-                counting = True
-
-        if counting is True:
-            count += 1
-
-    line_x_start = 20 + sseq_start * 10
-    line_x_end = 20 + sseq_end * 10
-    line_y = y - 30
-    c.line(line_x_start, line_y, line_x_end, line_y)
-    c.drawString((line_x_start + line_x_end) / 2, y - 45, 'Saturation Area')
-
-    c.save()
+    plt.savefig('./library/freq_plot.pdf', bbox_inches='tight')
 
 
 def split_into_codons(seq: str, start_frame: int) -> list:
-    """Split <seq> into list codons based on <start_frame>
-    """
     if start_frame != 0:
         codons = [seq[:start_frame]]
         codons += [seq[j:j + 3] for j in range(start_frame, len(seq), 3)]
@@ -633,8 +534,6 @@ def split_into_codons(seq: str, start_frame: int) -> list:
 
 
 def is_one_char_different(codon1, codon2):
-    """Returns True iff <codon1> and <codon2> differ by one base
-    """
     diff_count = 0
     for c1, c2 in zip(codon1, codon2):
         if c1 != c2:
@@ -644,64 +543,56 @@ def is_one_char_different(codon1, codon2):
     return diff_count == 1
 
 
-def get_edit_position(str1, str2, j=0):
-    """Returns index of edit position in <str1>"""
+def get_edit_position(str1, str2, j=0, wt_rtt=''):
+    # j = sseq.index(rtt_)
     for i in range(len(str2)):
         if i+j >= len(str1):
             return None # assuming splice sites always in saturation area.
-        
+
         if str1[i+j] != str2[i]:
             return i+j
     return 0
 
 
-#TODO: Do this in a non retarded way
+def find_synony_codon(codon: str, left_restrict=0, right_restrict=0, reverse_order=0):
+    for amino_acid, codons in SynonymousCodons.items():
+        if codon in codons:
+            filtered_codons = [c for c in codons if c != codon]
+
+            if right_restrict > 0:
+                filtered_codons = [c for c in filtered_codons if c[-right_restrict:] == codon[-right_restrict:]]
+            elif left_restrict > 0:
+                filtered_codons = [c for c in filtered_codons if c[:left_restrict] == codon[:left_restrict]]
+
+            one_char_diff_codons = [c for c in filtered_codons if is_one_char_different(c, codon)]
+
+            sorted_codons = sorted(one_char_diff_codons, key=lambda x: [x[i] != codon[i] for i in range(len(x))], reverse=bool(reverse_order))
+
+            if sorted_codons:
+                return sorted_codons[0]
+
+    return None
+
+
+def find_upstream_codons(seq_codons, rtt_codons, a=1):
+    seq_str = ''.join(seq_codons)
+    rtt_str = ''.join(rtt_codons)
+
+    start_index = seq_str.find(rtt_str)
+    if start_index == -1:
+        return []
+
+    codon_start_index = start_index // 3
+    codon_end_index = (start_index + len(rtt_str)) // 3
+
+    if a == -1:  # Upstream codons
+        return seq_codons[max(0, codon_start_index):codon_start_index+2]
+    elif a == 1:  # Downstream codons
+        return seq_codons[codon_end_index-1:codon_end_index+1]
+
+
+# TODO: Do this in a non retarded way
 def _get_synony_rtt(seq: str, sseq: str, rtt: str, frame: int, strand: str, splice: list) -> list:
-    """Returns list of RTTs installing silent mutations based off <rtt>. Avoids splice sites.
-    """
-    
-    def find_synony_codon(codon: str, left_restrict=0, right_restrict=0, reverse_order=0):
-        """Returns priority silent mutation installing codon
-        """
-        for _, codons in codon_table.items():
-            if codon in codons:
-                filtered_codons = [c for c in codons if c != codon]
-
-                if right_restrict > 0:
-                    filtered_codons = [c for c in filtered_codons if c[-right_restrict:] == codon[-right_restrict:]]
-                elif left_restrict > 0:
-                    filtered_codons = [c for c in filtered_codons if c[:left_restrict] == codon[:left_restrict]]
-
-                one_char_diff_codons = [c for c in filtered_codons if is_one_char_different(c, codon)]
-
-                sorted_codons = sorted(one_char_diff_codons, key=lambda x: [x[i] != codon[i] for i in range(len(x))], reverse=bool(reverse_order))
-
-                if sorted_codons:
-                    return sorted_codons[0]
-
-        return None
-
-
-    def find_upstream_codons(seq_codons, rtt_codons, downstream=True):
-        """Finds codons in <seq_codons> that are upstream (in seed region) of PAM corresponding to RTT <rtt_codons>
-        
-        For reverse complement RTT (a (+) strand PAM) go downstream.
-        """
-        seq_str = ''.join(seq_codons)
-        rtt_str = ''.join(rtt_codons)
-
-        start_index = seq_str.find(rtt_str)
-        if start_index == -1:
-            return []
-
-        codon_start_index = start_index // 3
-        codon_end_index = (start_index + len(rtt_str)) // 3
-
-        if not downstream:  # (+)
-            return seq_codons[max(0, codon_start_index):codon_start_index+2]
-        else:  # (-)
-            return seq_codons[codon_end_index-1:codon_end_index+1]
-    
     seq = seq.upper()
     frame -= 1
     synony_rtts=[]
@@ -716,10 +607,10 @@ def _get_synony_rtt(seq: str, sseq: str, rtt: str, frame: int, strand: str, spli
 
         codons_rtt = split_into_codons(rtt_, rtt_start)
         codons_seq = split_into_codons(seq, frame)
-        upstream = find_upstream_codons(codons_seq, codons_rtt, downstream=False)
+        upstream = find_upstream_codons(codons_seq, codons_rtt, a=-1)
 
         # PAM is +3, 5'-NNN N(NG G)NN-3', 'G' in G)NN codon never destroyed
-        if len(codons_rtt[0])==2: 
+        if len(codons_rtt[0])==2:
             if codons_rtt[1] != pam_snv[codons_rtt[1]]:
                 new_rtt = rtt[:20] + _r(_c(pam_snv[codons_rtt[1]])) + rtt[23:]
                 synony_rtts.append(new_rtt)
@@ -745,10 +636,10 @@ def _get_synony_rtt(seq: str, sseq: str, rtt: str, frame: int, strand: str, spli
                     synony_overlap = synony[:index_rtt_in_sseq]
                     pos = get_edit_position(sseq, synony_overlap, sseq.rfind(rtt_))
                 else:
-                    index_rtt_in_sseq = _r(_c(rtt)).rfind(rtt_) 
+                    index_rtt_in_sseq = _r(_c(rtt)).rfind(rtt_)
                     synony_overlap = synony[index_rtt_in_sseq:]
                     pos = get_edit_position(sseq, synony_overlap, sseq.index(rtt_))
-                
+
                 if pos in splice:
                     synony_rtts.pop(count)
                 else:
@@ -762,7 +653,7 @@ def _get_synony_rtt(seq: str, sseq: str, rtt: str, frame: int, strand: str, spli
                     new_rtt = rtt[:17-3*i] + _r(_c(codon)) + rtt[20-3*i:]
                     synony_rtts.append(new_rtt)
                 i += 1
-            
+
             # Remove synony RTTs that edit splice site
             count = 0
             rtt_ = _overlap(seq, sseq, _r(_c(rtt))) # revese complement of overlap
@@ -773,10 +664,10 @@ def _get_synony_rtt(seq: str, sseq: str, rtt: str, frame: int, strand: str, spli
                     synony_overlap = synony[:index_rtt_in_sseq]
                     pos = get_edit_position(sseq, synony_overlap, sseq.rfind(rtt_))
                 else:
-                    index_rtt_in_sseq = _r(_c(rtt)).rfind(rtt_) 
+                    index_rtt_in_sseq = _r(_c(rtt)).rfind(rtt_)
                     synony_overlap = synony[index_rtt_in_sseq:]
                     pos = get_edit_position(sseq, synony_overlap, sseq.index(rtt_))
-                
+
                 if pos in splice:
                     synony_rtts.pop(count)
                 else:
@@ -831,10 +722,10 @@ def _get_synony_rtt(seq: str, sseq: str, rtt: str, frame: int, strand: str, spli
                     synony_overlap = synony[:index_rtt_in_sseq]
                     pos = get_edit_position(sseq, synony_overlap, sseq.rfind(rtt_))
                 else:
-                    index_rtt_in_sseq = _r(_c(rtt)).rfind(rtt_) 
+                    index_rtt_in_sseq = _r(_c(rtt)).rfind(rtt_)
                     synony_overlap = synony[index_rtt_in_sseq:]
                     pos = get_edit_position(sseq, synony_overlap, sseq.index(rtt_))
-                
+
                 if pos in splice:
                     synony_rtts.pop(count)
                 else:
@@ -860,10 +751,10 @@ def _get_synony_rtt(seq: str, sseq: str, rtt: str, frame: int, strand: str, spli
                     synony_overlap = synony[:index_rtt_in_sseq]
                     pos = get_edit_position(sseq, synony_overlap, sseq.rfind(rtt_))
                 else:
-                    index_rtt_in_sseq = _r(_c(rtt)).rfind(rtt_) 
+                    index_rtt_in_sseq = _r(_c(rtt)).rfind(rtt_)
                     synony_overlap = synony[index_rtt_in_sseq:]
                     pos = get_edit_position(sseq, synony_overlap, sseq.index(rtt_))
-                
+
                 if pos in splice:
                     synony_rtts.pop(count)
                 else:
@@ -895,7 +786,7 @@ def _get_synony_rtt(seq: str, sseq: str, rtt: str, frame: int, strand: str, spli
                 new_rtt = rtt[:-1] + _r(_c(codon))[0]
                 synony_rtts.append(new_rtt)
 
-            
+
             # Remove synony RTTs that edit splice site
             count = 0
             rtt_ = _overlap(seq, sseq, _r(_c(rtt))) # revese complement of overlap
@@ -906,10 +797,10 @@ def _get_synony_rtt(seq: str, sseq: str, rtt: str, frame: int, strand: str, spli
                     synony_overlap = synony[:index_rtt_in_sseq]
                     pos = get_edit_position(sseq, synony_overlap, sseq.rfind(rtt_))
                 else:
-                    index_rtt_in_sseq = _r(_c(rtt)).rfind(rtt_) 
+                    index_rtt_in_sseq = _r(_c(rtt)).rfind(rtt_)
                     synony_overlap = synony[index_rtt_in_sseq:]
                     pos = get_edit_position(sseq, synony_overlap, sseq.index(rtt_))
-                
+
                 if pos in splice:
                     synony_rtts.pop(count)
                 else:
@@ -934,10 +825,10 @@ def _get_synony_rtt(seq: str, sseq: str, rtt: str, frame: int, strand: str, spli
                     synony_overlap = synony[:index_rtt_in_sseq]
                     pos = get_edit_position(sseq, synony_overlap, sseq.rfind(rtt_))
                 else:
-                    index_rtt_in_sseq = _r(_c(rtt)).rfind(rtt_) 
+                    index_rtt_in_sseq = _r(_c(rtt)).rfind(rtt_)
                     synony_overlap = synony[index_rtt_in_sseq:]
                     pos = get_edit_position(sseq, synony_overlap, sseq.index(rtt_))
-                
+
                 if pos in splice:
                     synony_rtts.pop(count)
                 else:
@@ -989,14 +880,14 @@ def _get_synony_rtt(seq: str, sseq: str, rtt: str, frame: int, strand: str, spli
             count = 0
             rtt_ = _overlap(seq, sseq, rtt)
             for _ in range(len(synony_rtts)):
-                synony = synony_rtts[count]   
+                synony = synony_rtts[count]
                 if seq.index(rtt) + 25 > (seq.index(sseq) + len(sseq)):  # RTT hangs over end of sseq
                     index_rtt_in_sseq = len(rtt_)
                     pos = get_edit_position(sseq, synony[:index_rtt_in_sseq], sseq.index(rtt_))
                 else:
                     index_rtt_in_sseq = rtt.rfind(rtt_)
                     pos = get_edit_position(sseq, synony[index_rtt_in_sseq:], sseq.index(rtt_))
-                
+
                 if pos in splice:
                     synony_rtts.pop(count)
                 else:
@@ -1015,14 +906,14 @@ def _get_synony_rtt(seq: str, sseq: str, rtt: str, frame: int, strand: str, spli
             count = 0
             rtt_ = _overlap(seq, sseq, rtt)
             for _ in range(len(synony_rtts)):
-                synony = synony_rtts[count]   
+                synony = synony_rtts[count]
                 if seq.index(rtt) + 25 > (seq.index(sseq) + len(sseq)):  # RTT hangs over end of sseq
                     index_rtt_in_sseq = len(rtt_)
                     pos = get_edit_position(sseq, synony[:index_rtt_in_sseq], sseq.index(rtt_))
                 else:
                     index_rtt_in_sseq = rtt.rfind(rtt_)
                     pos = get_edit_position(sseq, synony[index_rtt_in_sseq:], sseq.index(rtt_))
-                
+
                 if pos in splice:
                     synony_rtts.pop(count)
                 else:
@@ -1057,19 +948,19 @@ def _get_synony_rtt(seq: str, sseq: str, rtt: str, frame: int, strand: str, spli
             count = 0
             rtt_ = _overlap(seq, sseq, rtt)
             for _ in range(len(synony_rtts)):
-                synony = synony_rtts[count]   
+                synony = synony_rtts[count]
                 if seq.index(rtt) + 25 > (seq.index(sseq) + len(sseq)):  # RTT hangs over end of sseq
                     index_rtt_in_sseq = len(rtt_)
                     pos = get_edit_position(sseq, synony[:index_rtt_in_sseq], sseq.index(rtt_))
                 else:
                     index_rtt_in_sseq = rtt.rfind(rtt_)
                     pos = get_edit_position(sseq, synony[index_rtt_in_sseq:], sseq.index(rtt_))
-                
+
                 if pos in splice:
                     synony_rtts.pop(count)
                 else:
                     count += 1
-            
+
             # Downstream RTTS
             i = 0
             while len(synony_rtts) < 4:
@@ -1079,19 +970,19 @@ def _get_synony_rtt(seq: str, sseq: str, rtt: str, frame: int, strand: str, spli
                     if new_rtt not in synony_rtts:
                         synony_rtts.append(new_rtt)
                 i += 1
-            
+
             # Remove synony RTTs that edit splice site
             count = 0
             rtt_ = _overlap(seq, sseq, rtt)
             for _ in range(len(synony_rtts)):
-                synony = synony_rtts[count]   
+                synony = synony_rtts[count]
                 if seq.index(rtt) + 25 > (seq.index(sseq) + len(sseq)):  # RTT hangs over end of sseq
                     index_rtt_in_sseq = len(rtt_)
                     pos = get_edit_position(sseq, synony[:index_rtt_in_sseq], sseq.index(rtt_))
                 else:
                     index_rtt_in_sseq = rtt.rfind(rtt_)
                     pos = get_edit_position(sseq, synony[index_rtt_in_sseq:], sseq.index(rtt_))
-                
+
                 if pos in splice:
                     synony_rtts.pop(count)
                 else:
@@ -1148,18 +1039,18 @@ def _get_synony_rtt(seq: str, sseq: str, rtt: str, frame: int, strand: str, spli
                 if new_rtt not in synony_rtts:
                     synony_rtts.append(new_rtt)
 
-            
+
             # Remove synony RTTs that edit splice site
             count = 0
             rtt_ = _overlap(seq, sseq, rtt)
             index_rtt_in_sseq = rtt.index(rtt_)
             for _ in range(len(synony_rtts)):
-                synony = synony_rtts[count]   
+                synony = synony_rtts[count]
                 if seq.index(rtt) + 25 > (seq.index(sseq) + len(sseq)):  # RTT hangs over end of sseq
                     pos = get_edit_position(sseq, synony[:index_rtt_in_sseq], sseq.index(rtt_))
                 else:
                     pos = get_edit_position(sseq, synony[index_rtt_in_sseq:], sseq.index(rtt_))
-                
+
                 if pos in splice:
                     synony_rtts.pop(count)
                 else:
@@ -1180,12 +1071,12 @@ def _get_synony_rtt(seq: str, sseq: str, rtt: str, frame: int, strand: str, spli
             rtt_ = _overlap(seq, sseq, rtt)
             index_rtt_in_sseq = rtt.index(rtt_)
             for _ in range(len(synony_rtts)):
-                synony = synony_rtts[count]   
+                synony = synony_rtts[count]
                 if seq.index(rtt) + 25 > (seq.index(sseq) + len(sseq)):  # RTT hangs over end of sseq
                     pos = get_edit_position(sseq, synony[:index_rtt_in_sseq], sseq.index(rtt_))
                 else:
                     pos = get_edit_position(sseq, synony[index_rtt_in_sseq:], sseq.index(rtt_))
-                
+
                 if pos in splice:
                     synony_rtts.pop(count)
                 else:
@@ -1199,10 +1090,6 @@ def _get_synony_rtt(seq: str, sseq: str, rtt: str, frame: int, strand: str, spli
 
 def run_synony(seq: str, sseq: str, frame: int, df, HA, splice):
 
-    """Run in web to generate complete synonymous epegRNA saturation cloning library
-
-    <df> is no_ctl library from run_cloning or run_cloning_
-    """
     def get_preserving_rtt(rtt_lst, sat_rtt, wt_rtt):
         for synony_rtt in rtt_lst:
             synony_pos = get_edit_position(synony_rtt, wt_rtt)  # Position of synony edit in the current synony rtt from str_lst
@@ -1220,6 +1107,8 @@ def run_synony(seq: str, sseq: str, frame: int, df, HA, splice):
         return 'No Alternate Silent Mutations Available'
 
     seq, sseq = seq.upper(), sseq.upper()
+
+    # df is no_ctl library from run_cloning or run_cloning_
 
     wt_rtts_f = _find_rtt(seq, sseq, '+')
     wt_rtts_r = _find_rtt(seq, sseq, '-')
@@ -1249,7 +1138,7 @@ def run_synony(seq: str, sseq: str, frame: int, df, HA, splice):
         new_row['Edited DNA Sequence (syn)'] = process_row(new_row, seq, wt_rtts)
         new_row['Syn. Mutation Position (seq)'] = get_edit_position(new_row['Edited DNA Sequence'], new_row['Edited DNA Sequence (syn)']) + 1
         new_rows.append(new_row)
-    
+
     new_rows_df = pd.DataFrame(new_rows)
 
     # Add controls
@@ -1261,7 +1150,7 @@ def run_synony(seq: str, sseq: str, frame: int, df, HA, splice):
         new_row_stop['RTTs'] = _get_control_rtt(seq, sseq, wt_rtts[i-1], frame, strand=strands[i-1], syn=True, splice=splice)
         new_row_stop['Edited DNA Sequence (syn)'] = process_row(new_row_stop, seq, wt_rtts)
         new_row_stop['Filler'] = 'GTTTCGAGACG' + _random_filler() + 'CGTCTCGGTGC'
-        
+
         new_row_del['RTTs'] = wt_rtts[i-1][:9] + wt_rtts[i-1][10:]
         new_row_del['Syn. Mutation Position'] = None
         new_row_del['Edited DNA Sequence (syn)'] = process_row(new_row_del, seq, wt_rtts)
@@ -1269,7 +1158,7 @@ def run_synony(seq: str, sseq: str, frame: int, df, HA, splice):
 
         group_ = pd.concat([group, pd.DataFrame([new_row_stop, new_row_del])], ignore_index=True)
         dfs.append(group_)
-    
+
     new_rows_df = pd.concat(dfs, ignore_index=True)
 
     new_rows_df.drop('Edited DNA Sequence', axis=1, inplace=True)
@@ -1288,13 +1177,117 @@ def run_synony(seq: str, sseq: str, frame: int, df, HA, splice):
 
     return new_rows_df
 
+def find_mutation_index(original, mutated, strand):
+    if strand=='+':
+        original = _r(_c(original))
+        mutated = _r(_c(mutated))
 
+    for i in range(len(original)):
+        if original[i] != mutated[i]:
+            return i
+
+
+def get_pridict_df(library, seq, sseq):
+    seq_ = trim_string(seq, sseq)
+    scored_rows = library.groupby('PAM No.', group_keys=False).apply(lambda x: x.iloc[len(x) // 2]).reset_index(drop=True)
+
+    wt_rtts_f = _find_rtt(seq, sseq, strand='+')
+    wt_rtts_r = _find_rtt(seq, sseq, strand='-')
+    
+    wt_rtts = wt_rtts_f + wt_rtts_r
+
+    pridict_inputs = generate_formatted_strings(scored_rows, seq, wt_rtts)
+
+    scored_rows['PRIDICT input'] = pridict_inputs
+
+    for i, row in scored_rows.iterrows():
+        if len(row['PRIDICT input']) != 204:
+            continue
+
+        scored_rows.at[i, 'PRIDICT2.0 score'] = manual_pred(row['PRIDICT input'], row['RTTs'], row['PBS'])
+
+    return scored_rows
+
+
+def generate_formatted_strings(library, seq, wt_rtts):
+    formatted_strings = []
+
+    for _, row in library.iterrows():
+        pam_number = row['PAM No.']-1
+        wt_rtt = wt_rtts[pam_number]
+        rtt = row['RTTs']
+        strand = row['Strand']
+        mutation_index = find_mutation_index(wt_rtt, rtt, strand)
+
+        if strand == '-':
+            index = seq.find(wt_rtt) + mutation_index
+            original_base = wt_rtt[mutation_index]
+            differing_base = rtt[mutation_index]
+        else:
+            index = seq.find(_r(_c(wt_rtt))) + mutation_index
+            original_base = _r(_c(wt_rtt))[mutation_index]
+            differing_base = _r(_c(rtt))[mutation_index]
+
+        start = max(0, index - 100)
+        end = min(len(seq), index + 100)
+        pre = seq[start:index]
+        post = seq[index+1:end]
+        formatted_string = pre + f"({original_base}/{differing_base})" + post
+        formatted_strings.append(formatted_string)
+
+    return formatted_strings
+
+
+def manual_pred(wts, rtt, pbs):
+
+    wts, rtt, pbs = wts.upper(), rtt.upper(), pbs.upper()
+
+    if len(wts) < 203:
+        return 'not available - wts+edit too short'
+
+    command = [
+            'python', '/Users/Dong-Kyu Kim/PRIDICT2/pridict2_pegRNA_design.py', 'manual',  # CHANGE DIRECTORY NAME HERE
+            '--sequence-name', 'seq',
+            '--sequence', wts
+        ]
+
+    csv_file_path = '/Users/Dong-Kyu Kim/PRIDICT2_Lib_Fixed/library/predictions.csv'  # CHANGE DIRECTORY NAME HERE
+
+    try:
+        subprocess.run(command, check=True)
+    except Exception as e:
+        print(f"Error processing: {e}")
+        return 'not available'
+
+    while not os.path.exists(csv_file_path):
+        time.sleep(1)
+
+    pridict2_output = pd.read_csv(csv_file_path)
+
+    os.remove(csv_file_path)
+
+    pridict2_output['RTrevcomp'] = pridict2_output['RTrevcomp'].str.upper()
+    pridict2_output['PBSrevcomp'] = pridict2_output['PBSrevcomp'].str.upper()
+
+    score_row = pridict2_output.loc[
+        (pridict2_output['RTrevcomp'] == rtt) &
+        (pridict2_output['PBSrevcomp'] == pbs),
+        'PRIDICT2_0_editing_Score_deep_HEK'
+    ]
+
+    if score_row.empty:
+        return 'RTT not in model output'
+    else:
+        return score_row.iloc[0]
+    
 
 if __name__ == '__main__':
+
+    # -- You need to clone the PRIDICT2 repo before running if you want epeg activity predictions --
     
     # Set parameters: 
-    seq_ = 'ttttctttaacctaaagtgagatccatcagtagtacaggtagttgttggcaaagcctcttgttcgttccttgtactgagaccctagtctgccactgaggatttggtttttgcccttccagTGTATACTCTGAAAGAGCGATGCCTCCAGGTTGTCCGGAGCCTAGTCAAGCCTGAGAATTACAGGAGACTGGACATCGTCAGGTCGCTCTACGAAGATcTGGAAGACCACCCAAATGTGCAGAAAGACCTGGAGcGGCTGACACAGGAGCGCATTGCACATCAACGGATGGGAGATTGAAGATTTCTGTTGAAACTTACACTGTTTCATCTCAGCTTTTGATGGTACTGATGAGTCTTGATCTAGATACAGGACTGGTTCCTTCCTTAGTTTCAAAGTGTCTCATTCTCAG'
-    sseq_ = 'gatttggtttttgcccttccagTGTATACTCTGAAAGAGCGATGCCTCCAGGTTGTCCGGAGCCTAGTCAAGCCTGAGAATTACAGGAGACTGGACATCGTCAGGTCGCTCTACGAAGATcTGGAAGACCACCCAAATGTGCAGAAAGACCTGGAGcGGCTGACACAGGAGCGCATTGCACATCAACGGATGGGAGATTGAAGATTTCTGTT'
+    seq_ = 'ttttctttaacctaaagtgagatccatcagtagtacaggtagttgttggcaaagcctcttgttcgttccttgtactgagaccctagtctgccactgaggatttggtttttgcccttccagTGTATACTCTGAAAGAGCGATGCCTCCAGGTTGTCCGGAGCCTAGTCAAGCCTGAGAATTACAGGAGACTGGACATCGTCAGGTCGCTCTACGAAGATcTGGAAGACCACCCAAATGTGCAGAAAGACCTGGAGcGGCTGACACAGGAGCGCATTGCACATCAACGGATGGGAGATTGAAGATTTCTGTTGAAACTTACACTGTTTCATCTCAGCTTTTGATGGTACTGATGAGTCTTGATCTAGATACAGGACTGGTTCCTTCCTTAGTTTCAAAGTGTCTCATTCTCAG'.upper()
+    sseq_ = 'gatttggtttttgcccttccagTGTATACTCTGAAAGAGCGATGCCTCCAGGTTGTCCGGAGCCTAGTCAAGCCTGAGAATTACAGGAGACTGGACATCGTCAGGTCGCTCTACGAAGATcTGGAAGACCACCCAAATGTGCAGAAAGACCTGGAGcGGCTGACACAGGAGCGCATTGCACATCAACGGATGGGAGATTGAAGATTTCTGTT'.upper()
     acc = [18, 21]
     don = [223, 231]
     splice = list(range(acc[0] - 1, acc[1])) + list(range(don[0] - 1, don[1]))
@@ -1313,8 +1306,11 @@ if __name__ == '__main__':
     # Cloning library with silent mutations
     run_synony(seq_, sseq_, 2, libs[1], HA=False, splice=splice).to_csv('./library/synony_full.csv')
 
+    # Get PRIDICT2.0 scores for 1 epeg / PAM
+    # get_pridict_df(libs[1], seq_, sseq_).to_csv('./library/predictions.csv')
+
     # Generates frequency table and plot
     run_freq_table(seq_, sseq_).to_csv('./library/freq_table.csv', index=False)
     run_freq_plot(seq_, sseq_)
 
-    # Check results in 'lib' folder
+    # Check results in 'library' folder
