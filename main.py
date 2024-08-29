@@ -1134,7 +1134,7 @@ def run_synony(seq: str, sseq: str, frame: int, df, HA, splice):
         j = row['PAM No.'] - 1
         pres_rtt = get_preserving_rtt(synony_rtts, row['RTTs'], wt_rtts[j])
         new_row['RTTs'] = pres_rtt
-        new_row['Syn. Mutation Position'] = 42-get_edit_position(new_row['RTTs'], row['RTTs'])
+        new_row['Syn. Mutation Position'] = 25-get_edit_position(new_row['RTTs'], row['RTTs'].upper())-3-1
         new_row['Edited DNA Sequence (syn)'] = process_row(new_row, seq, wt_rtts)
         new_row['Syn. Mutation Position (seq)'] = get_edit_position(new_row['Edited DNA Sequence'], new_row['Edited DNA Sequence (syn)']) + 1
         new_rows.append(new_row)
@@ -1305,14 +1305,14 @@ if __name__ == '__main__':
     libs[2].to_csv('./library/only_ctl.csv', index=False)
 
     # Cloning library with silent mutations - set HA to True if you want homology arms in the full epeg
-    # run_synony(seq_, sseq_, 2, libs[1], HA=False, splice=splice).to_csv('./library/synony_full.csv')
+    run_synony(seq_, sseq_, 2, libs[1], HA=False, splice=splice).to_csv('./library/synony_full.csv')
 
     # Get PRIDICT2.0 scores for 1 epeg / PAM
-    get_pridict_df(libs[1], seq_, sseq_).to_csv('./library/predictions.csv')
+    # get_pridict_df(libs[1], seq_, sseq_).to_csv('./library/predictions.csv')
 
     # Generates frequency table and plot
-    # run_freq_table(seq_, sseq_).to_csv('./library/freq_table.csv', index=False)
-    # run_freq_plot(seq_, sseq_)
+    run_freq_table(seq_, sseq_).to_csv('./library/freq_table.csv', index=False)
+    run_freq_plot(seq_, sseq_)
 
     # Check results in 'library' folder
 
