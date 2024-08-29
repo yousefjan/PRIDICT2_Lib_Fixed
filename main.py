@@ -1203,8 +1203,9 @@ def get_pridict_df(library, seq, sseq):
     for i, row in scored_rows.iterrows():
         if len(row['PRIDICT input']) != 204:
             continue
-
-        scored_rows.at[i, 'PRIDICT2.0 score'] = manual_pred(row['PRIDICT input'], row['RTTs'], row['PBS'])
+        
+        score = manual_pred(row['PRIDICT input'], row['RTTs'], row['PBS'])
+        scored_rows.at[i, 'PRIDICT2.0 score'] = score
 
     return scored_rows
 
@@ -1235,6 +1236,8 @@ def generate_formatted_strings(library, seq, wt_rtts):
         formatted_string = pre + f"({original_base}/{differing_base})" + post
         formatted_strings.append(formatted_string)
 
+    # pd.DataFrame(formatted_strings).to_csv('formatted_strings.csv')
+
     return formatted_strings
 
 
@@ -1246,12 +1249,12 @@ def manual_pred(wts, rtt, pbs):
         return 'not available - wts+edit too short'
 
     command = [
-            'python', '/Users/Dong-Kyu Kim/PRIDICT2/pridict2_pegRNA_design.py', 'manual',  # CHANGE DIRECTORY NAME HERE
+            'python', '/Users/dong-kyu kim/Desktop/PRIDICT2_Lib_Fixed/PRIDICT2/pridict2_pegRNA_design.py', 'manual',  # CHANGE DIRECTORY NAME 'dong-kyu kim/Desktop' HERE 
             '--sequence-name', 'seq',
             '--sequence', wts
         ]
 
-    csv_file_path = '/Users/Dong-Kyu Kim/PRIDICT2_Lib_Fixed/library/predictions.csv'  # CHANGE DIRECTORY NAME HERE
+    csv_file_path = '/Users/dong-kyu kim/Desktop/PRIDICT2_Lib_Fixed/PRIDICT2/predictions/seq_pegRNA_Pridict_full.csv' # CHANGE DIRECTORY NAME 'dong-kyu kim/Desktop' HERE 
 
     try:
         subprocess.run(command, check=True)
@@ -1283,8 +1286,6 @@ def manual_pred(wts, rtt, pbs):
 
 if __name__ == '__main__':
 
-    # -- You need to clone the PRIDICT2 repo before running if you want epeg activity predictions --
-    
     # Set parameters: 
     seq_ = 'ttttctttaacctaaagtgagatccatcagtagtacaggtagttgttggcaaagcctcttgttcgttccttgtactgagaccctagtctgccactgaggatttggtttttgcccttccagTGTATACTCTGAAAGAGCGATGCCTCCAGGTTGTCCGGAGCCTAGTCAAGCCTGAGAATTACAGGAGACTGGACATCGTCAGGTCGCTCTACGAAGATcTGGAAGACCACCCAAATGTGCAGAAAGACCTGGAGcGGCTGACACAGGAGCGCATTGCACATCAACGGATGGGAGATTGAAGATTTCTGTTGAAACTTACACTGTTTCATCTCAGCTTTTGATGGTACTGATGAGTCTTGATCTAGATACAGGACTGGTTCCTTCCTTAGTTTCAAAGTGTCTCATTCTCAG'.upper()
     sseq_ = 'gatttggtttttgcccttccagTGTATACTCTGAAAGAGCGATGCCTCCAGGTTGTCCGGAGCCTAGTCAAGCCTGAGAATTACAGGAGACTGGACATCGTCAGGTCGCTCTACGAAGATcTGGAAGACCACCCAAATGTGCAGAAAGACCTGGAGcGGCTGACACAGGAGCGCATTGCACATCAACGGATGGGAGATTGAAGATTTCTGTT'.upper()
@@ -1303,14 +1304,16 @@ if __name__ == '__main__':
     libs[1].to_csv('./library/no_ctl.csv', index=False)
     libs[2].to_csv('./library/only_ctl.csv', index=False)
 
-    # Cloning library with silent mutations
-    run_synony(seq_, sseq_, 2, libs[1], HA=False, splice=splice).to_csv('./library/synony_full.csv')
+    # Cloning library with silent mutations - set HA to True if you want homology arms in the full epeg
+    # run_synony(seq_, sseq_, 2, libs[1], HA=False, splice=splice).to_csv('./library/synony_full.csv')
 
     # Get PRIDICT2.0 scores for 1 epeg / PAM
-    # get_pridict_df(libs[1], seq_, sseq_).to_csv('./library/predictions.csv')
+    get_pridict_df(libs[1], seq_, sseq_).to_csv('./library/predictions.csv')
 
     # Generates frequency table and plot
-    run_freq_table(seq_, sseq_).to_csv('./library/freq_table.csv', index=False)
-    run_freq_plot(seq_, sseq_)
+    # run_freq_table(seq_, sseq_).to_csv('./library/freq_table.csv', index=False)
+    # run_freq_plot(seq_, sseq_)
 
     # Check results in 'library' folder
+
+    # py '/Users/dong-kyu kim/Desktop/PRIDICT2_Lib_Fixed/PRIDICT2/pridict2_pegRNA_design.py' manual --sequence-name seq --sequence 'CTAAAGTGAGATCCATCAGTAGTACAGGTAGTTGTTGGCAAAGCCTCTTGTTCGTTCCTTGTACTGAGACCCTAGTCTGCCACTGAGGATTTGGTTTTTG(C/G)CCTTCCAGTGTATACTCTGAAAGAGCGATGCCTCCAGGTTGTCCGGAGCCTAGTCAAGCCTGAGAATTACAGGAGACTGGACATCGTCAGGTCGCTCTA'
