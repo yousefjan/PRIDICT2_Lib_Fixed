@@ -154,7 +154,9 @@ def _get_control_rtt(seq, sseq, rtt, frame, strand, syn, splice) -> str:
             rtt_start = 1
 
         if syn:
-            rtt_ = _r(_c(_get_synony_rtt(seq, sseq, rtt, frame+1, strand, splice)[0])) ####
+            rtt_ = _get_synony_rtt(seq, sseq, rtt, frame+1, strand, splice) ####
+            if rtt_:
+                rtt_ = _r(_c(rtt_[0]))
 
         codons_rtt = split_into_codons(rtt_, rtt_start)
         codons_rtt[3 if len(codons_rtt[0]) < 3 else 2] = 'TGA'
@@ -177,7 +179,9 @@ def _get_control_rtt(seq, sseq, rtt, frame, strand, syn, splice) -> str:
             rtt_start = 1
 
         if syn:
-            rtt = _get_synony_rtt(seq, sseq, rtt, frame+1, strand, splice)[0] ####
+            rtt_ = _get_synony_rtt(seq, sseq, rtt, frame+1, strand, splice) ####
+            if rtt_:
+                rtt = rtt_[0]
 
         codons_rtt = split_into_codons(rtt, rtt_start)
         codons_rtt[-4 if len(codons_rtt[-1]) < 3 else -3] = 'TGA'
@@ -1085,7 +1089,7 @@ def _get_synony_rtt(seq: str, sseq: str, rtt: str, frame: int, strand: str, spli
             return synony_rtts
 
     # No PAM destruction nor upstream base synonymous edit possible
-    return None
+    return [rtt]
 
 
 def run_synony(seq: str, sseq: str, frame: int, df, HA, splice):
@@ -1286,26 +1290,27 @@ def manual_pred(wts, rtt, pbs):
 
 if __name__ == '__main__':
 
-    # Set parameters: 
-    seq_ = 'ttttctttaacctaaagtgagatccatcagtagtacaggtagttgttggcaaagcctcttgttcgttccttgtactgagaccctagtctgccactgaggatttggtttttgcccttccagTGTATACTCTGAAAGAGCGATGCCTCCAGGTTGTCCGGAGCCTAGTCAAGCCTGAGAATTACAGGAGACTGGACATCGTCAGGTCGCTCTACGAAGATcTGGAAGACCACCCAAATGTGCAGAAAGACCTGGAGcGGCTGACACAGGAGCGCATTGCACATCAACGGATGGGAGATTGAAGATTTCTGTTGAAACTTACACTGTTTCATCTCAGCTTTTGATGGTACTGATGAGTCTTGATCTAGATACAGGACTGGTTCCTTCCTTAGTTTCAAAGTGTCTCATTCTCAG'.upper()
-    sseq_ = 'gatttggtttttgcccttccagTGTATACTCTGAAAGAGCGATGCCTCCAGGTTGTCCGGAGCCTAGTCAAGCCTGAGAATTACAGGAGACTGGACATCGTCAGGTCGCTCTACGAAGATcTGGAAGACCACCCAAATGTGCAGAAAGACCTGGAGcGGCTGACACAGGAGCGCATTGCACATCAACGGATGGGAGATTGAAGATTTCTGTT'.upper()
-    acc = [18, 21]
-    don = [223, 231]
+    # Set parameters: ----------------
+    seq_ = 'TGTCATTTAAGCTTTTCCATTTTAAAAAATCCTGCTTTTTGTGTGTGCTTAAGATTTTATTTCTGGTCGTAAGCTTATTTACTAAGCAGTCTCTGTCTTATGATTCATTTGTTGTTCCAGATAGCAATATTTGTGGGTGTTCTGTCATTCAGCATCGCAGTCCTGAACAAAGTAGATATTGGATTGGATCAGTCTCTTTCGATGCCAGATGTAAGATGACTTCCTTTTTTTTTTTTTTTTAACTTCTTTAGCTGATGATGAATACATTTTTCAAAACATGCACGTAGGTGTTTCAAGCAAGTGCCTGCTTCTAACTGCAAATGGTGACAG'.upper()
+    sseq_ = 'TGATTCATTTGTTGTTCCAGATAGCAATATTTGTGGGTGTTCTGTCATTCAGCATCGCAGTCCTGAACAAAGTAGATATTGGATTGGATCAGTCTCTTTCGATGCCAGATGTAAGATGACTTCCTTTTTT'.upper()
+    acc = [8, 20]
+    don = [109, 116]
     splice = list(range(acc[0] - 1, acc[1])) + list(range(don[0] - 1, don[1]))
-    frame = +2
+    frame = +1
+    # ---------------------------------
 
     # Cloning library without homology arms
-    libs = run_cloning_(seq_, sseq_, frame, splice)
+    # libs = run_cloning_(seq_, sseq_, frame, splice)
 
     # Cloning library with homology arms
-    # libs = run_cloning(seq_, sseq_, frame, splice)
+    libs = run_cloning(seq_, sseq_, frame, splice)
 
     libs[0].to_csv('./library/full.csv', index=False)
     libs[1].to_csv('./library/no_ctl.csv', index=False)
     libs[2].to_csv('./library/only_ctl.csv', index=False)
 
     # Cloning library with silent mutations - set HA to True if you want homology arms in the full epeg
-    run_synony(seq_, sseq_, 2, libs[1], HA=False, splice=splice).to_csv('./library/synony_full.csv')
+    run_synony(seq_, sseq_, frame, libs[1], HA=False, splice=splice).to_csv('./library/synony_full.csv')
 
     # Get PRIDICT2.0 scores for 1 epeg / PAM
     # get_pridict_df(libs[1], seq_, sseq_).to_csv('./library/predictions.csv')
